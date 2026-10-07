@@ -1849,6 +1849,37 @@ def test_remove_statistics_update(table_v2_with_statistics: Table) -> None:
         )
 
 
+def test_update_statistics_set_then_remove_keeps_both_updates(table_v2_with_statistics: Table) -> None:
+    current_snapshot_id = 3055729675574597004
+    previous_snapshot_id = 3051729675574597004
+
+    statistics_file = StatisticsFile(
+        snapshot_id=current_snapshot_id,
+        statistics_path="s3://bucket/warehouse/new-stats.puffin",
+        file_size_in_bytes=124,
+        file_footer_size_in_bytes=27,
+        blob_metadata=[
+            BlobMetadata(
+                type="apache-datasketches-theta-v1",
+                snapshot_id=current_snapshot_id,
+                sequence_number=2,
+                fields=[1],
+            )
+        ],
+    )
+
+    transaction = table_v2_with_statistics.transaction()
+    transaction.update_statistics().set_statistics(statistics_file).remove_statistics(previous_snapshot_id).commit()
+
+    # Both operations in the chain must be staged, in order: set_statistics must not be
+    # discarded by the remove_statistics call that follows it.
+    assert transaction._updates == (  # pylint: disable=W0212
+        SetStatisticsUpdate(statistics=statistics_file),
+        RemoveStatisticsUpdate(snapshot_id=previous_snapshot_id),
+    )
+    assert transaction.table_metadata.statistics == [statistics_file]
+
+
 def test_set_partition_statistics_update(table_v2_with_statistics: Table) -> None:
     snapshot_id = table_v2_with_statistics.metadata.current_snapshot_id
 
