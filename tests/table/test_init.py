@@ -1868,15 +1868,16 @@ def test_update_statistics_set_then_remove_keeps_both_updates(table_v2_with_stat
         ],
     )
 
+    # The fixture already has statistics for both snapshots
+    assert {stats.snapshot_id for stats in table_v2_with_statistics.metadata.statistics} == {
+        current_snapshot_id,
+        previous_snapshot_id,
+    }
+
     transaction = table_v2_with_statistics.transaction()
     transaction.update_statistics().set_statistics(statistics_file).remove_statistics(previous_snapshot_id).commit()
 
-    # Both operations in the chain must be staged, in order: set_statistics must not be
-    # discarded by the remove_statistics call that follows it.
-    assert transaction._updates == (  # pylint: disable=W0212
-        SetStatisticsUpdate(statistics=statistics_file),
-        RemoveStatisticsUpdate(snapshot_id=previous_snapshot_id),
-    )
+    # set_statistics replaces the current snapshot's statistics, remove_statistics drops the previous one
     assert transaction.table_metadata.statistics == [statistics_file]
 
 
