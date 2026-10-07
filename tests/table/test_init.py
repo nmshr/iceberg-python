@@ -1692,7 +1692,6 @@ def test_remove_partition_statistics_update_with_invalid_snapshot_id(table_v2_wi
         )
 
 
-@pytest.mark.xfail(reason="remove_statistics uses = instead of +=, dropping preceding updates")
 def test_update_statistics_set_remove_chain(tmp_path: Path) -> None:
     catalog = InMemoryCatalog("test", warehouse=f"file://{tmp_path}")
     catalog.create_namespace("default")
@@ -1737,7 +1736,11 @@ def test_update_statistics_set_remove_chain(tmp_path: Path) -> None:
     with table.update_statistics() as update:
         update.set_statistics(statistics_file_2).remove_statistics(snapshot_id_1)
 
+    # The set_statistics call must survive the later remove_statistics call in the same
+    # chain: only the statistics for snapshot_id_1 should be removed, and the newly set
+    # statistics for snapshot_id_2 should still be committed.
     assert len(table.metadata.statistics) == 1
+    assert table.metadata.statistics[0].snapshot_id == snapshot_id_2
 
 
 def test_add_snapshot_update_fails_without_first_row_id(table_v3: Table) -> None:
